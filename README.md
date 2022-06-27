@@ -1,6 +1,6 @@
 # BSC Option Pricer
 
 ## Functionality Overview
--Pull stock prices from Yahoo Finance
--Price Call and Put options using implied volatilites from Yahoo Finance
--Linerally interpolate implied Volatilities
+1. Pull stock prices from Yahoo Finance
+2. Price Call and Put options using implied volatilites from Yahoo Finance
+3. Linerally interpolate implied Volatilities
