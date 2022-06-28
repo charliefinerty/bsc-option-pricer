@@ -93,7 +93,7 @@ def Interpolator1(Stock_Name, End_Date, Strike):
 
 
 #Update Spot values to most recent values
-def Update_Spot1():
+def Update_Spot():
     #Records excel book
     wb = xw.Book.caller()
     sheet1 = wb.sheets["BSC Value"]
