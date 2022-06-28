@@ -1,1 +1,251 @@
-print("hello world")
+import xlwings as xw
+from math import log, sqrt, exp
+from scipy.stats import norm
+import yfinance as yf
+from datetime import datetime
+
+
+#Create class for individual stocks, giving methods that return call and put prices. Varibles all floats: (Spot, Strike, Risk Free Rate, Time To Maturity, Dividend Yield, Volatility)
+class BSC:
+    def __init__(self, S, K, r, t, d, v):
+        self.S = S
+        self.K = K
+        self.r = r
+        self.t = t
+        self.d = d
+        self.v = v
+
+    def d1(self):
+        x = (log(self.S / self.K) + (self.r - self.d + (self.v ** 2) / 2) * self.t) / (self.v * sqrt(self.t))
+        return x
+    def d2(self):
+        x = self.d1() - self.v * sqrt(self.t)
+        return x
+    def Call_Price(self):
+        x = self.S * exp(-self.d *self.t) * norm.cdf(self.d1()) - self.K * exp(-self.r * self.t) * norm.cdf(self.d2())
+        return x
+    def Put_Price(self):
+        x = self.K * exp(-self.r * self.t) * norm.cdf(- self.d2()) - self.S * exp(-self.d *self.t) * norm.cdf(- self.d1())
+        return x
+    
+    
+
+#Create Interpolator function for cases where End_Date lies between option maturity dates on Yahoo Finance. Will not work with numbers above or below highest and lowest Time To Maturity. Varibles: (String, Datetime, Float)
+def Interpolator1(Stock_Name, End_Date, Strike):
+    #Create ticker with stock information
+    ticker = yf.Ticker(Stock_Name)
+    
+    #Create list of option dates 
+    Option_Dates = []
+    for i in ticker.options:
+        Option_Dates.append(datetime.strptime(i, '%Y-%m-%d'))
+        
+    #For statement to go through each option date from earliest to latest and check if they are above the desired End_Date
+    for i in range(0, len(Option_Dates)-1):
+        #Establish flag that will break loop if desired volatility is found
+        flag = False
+        
+        #If statement to check if option date is later than desired End_Date
+        if End_Date < Option_Dates[i]:
+            #Checks to see if option date is earliest, and if it is true Volatility is returned as None and flag is True to break loop
+            if i == 0:
+                print("Not Allowed")
+                Vol = False
+                flag = True
+
+            else:
+                #Option_Dates[i] now established as closest value under desired End_Date
+                #Checks to see if desired Strike is in list of strike prices in specified Option_Date[i]
+                if Strike in ticker.option_chain(ticker.options[i]).calls['strike'].values and Strike in ticker.option_chain(ticker.options[i+1]).calls['strike'].values:
+                    #Interpolates to End_Date using two closest option dates and their respective volatilities
+                    EarlyVol = ticker.option_chain(ticker.options[i]).calls['impliedVolatility'][i]
+                    LateVol = ticker.option_chain(ticker.options[i+1]).calls['impliedVolatility'][i+1]
+                    EarlyDate = Option_Dates[i]
+                    LateDate = Option_Dates[i+1]
+                    Vol = EarlyVol + ((End_Date - EarlyDate).days / 360) * ((LateVol - EarlyVol)/((LateDate - EarlyDate).days/360))
+                    
+                    #Sets flag to true to break loop
+                    flag = True
+
+                else:
+                    #Strike price established as not available, breaks loop
+                    print("Strike Not Available 1")
+                    Vol = False
+                    flag = True
+
+        else:
+            #End_Date established as later than option date
+            #Checks to see if option date is latest option, and breaks loop if true
+            if i == len(ticker.options)-1:
+                print("Not Allowed")
+                Vol = False
+                flag = True
+            else:
+                Vol = False
+                pass
+        
+        #Flag check to break loop
+        if flag == True:
+            break
+        
+    return Vol
+
+
+
+#Update Spot values to most recent values
+def Update_Spot1():
+    #Records excel book
+    wb = xw.Book.caller()
+    sheet1 = wb.sheets["BSC Value"]
+    
+    #Creates ranges for Stock_Names and Spot prices
+    Stock_Name = sheet1["StockNames"]
+    Spot = sheet1["Spot"]
+    
+    #Establishes count to help index spot values
+    i=0
+    
+    #For statement to go through each stock name
+    for ii in Stock_Name:
+        #Gets data on individual stock, and sets spot value to most recent close
+        ticker = yf.Ticker(ii.value)
+        todays_data = ticker.history(period='1d')
+        Spot[i].value = todays_data['Close'][0]
+        
+        #Increase count
+        i=i+1
+    
+
+    
+def main():
+    #Records excel book
+    wb = xw.Book.caller()
+    sheet1 = wb.sheets["BSC Value"]
+
+    #Create Call, Put and Volatility Ranges and clear them
+    Call_Cell = sheet1["CallPrice"]
+    Put_Cell = sheet1["PutPrice"]
+    Volatility = sheet1["Volatility"]
+    Call_Cell.clear_contents()
+    Put_Cell.clear_contents()
+    Volatility.clear_contents()
+    
+    #Create Ranges for each info category in BSC Value sheet
+    Stock_Name = sheet1["StockNames"]
+    Spot = sheet1["Spot"]
+    Strike = sheet1["Strike"]
+    Risk_Free_Rate = sheet1["RiskFreeInterest"]
+    Time_To_Mat = sheet1["TimeToMat"]
+    Dividend = sheet1["Dividend"]
+    End_Date = sheet1["EndDate"]  
+    
+    #Reset colour of info cells
+    Stock_Name.color = '#FFFFFF'
+    Spot.color = '#FFFFFF'
+    Strike.color = '#FFFFFF'
+    Risk_Free_Rate.color = '#FFFFFF'
+    Time_To_Mat.color = '#FFFFFF'
+    Dividend.color = '#FFFFFF'
+    End_Date.color = '#FFFFFF'
+
+    
+    #For statement for each option
+    for i in range(len(Spot)):
+        #If Statement to check if all info required is present
+        if Strike[i].value and Spot[i].value and Risk_Free_Rate[i].value and Time_To_Mat[i].value and Stock_Name[i].value and End_Date[i].value and Dividend[i].value != None:
+            #Create ticker from stock data
+            ticker = yf.Ticker(Stock_Name[i].value)
+
+            #If statment to see if maturity date is available in options
+            if End_Date[i].value.strftime('%Y-%m-%d') in ticker.options:
+                #If statment to see if Strike value is available
+                if Strike[i].value in ticker.option_chain(End_Date[i].value.strftime('%Y-%m-%d')).calls['strike'].values:
+                    #Creates list of all strike prices with specific maturity date 
+                    xy = ticker.option_chain(End_Date[i].value.strftime('%Y-%m-%d'))
+                    f = xy.calls['strike'].values.tolist()
+                    
+                    #indexes desired strike value and returns implied volatility used in specific option
+                    index = f.index(Strike[i].value)
+                    Vol = xy.calls['impliedVolatility'][index]
+                    
+                    #Create stock using info in specific column & print prices in Cell and Put cells & print volatility in Volatility cell
+                    Stock = BSC(Spot[i].value, Strike[i].value, Risk_Free_Rate[i].value, Time_To_Mat[i].value, Dividend[i].value, Vol)
+                    Call_Cell[i].value = Stock.Call_Price()
+                    Put_Cell[i].value = Stock.Put_Price()
+                    Volatility[i].value = Vol
+                    
+                    #Make colour of sucessfull pricing green
+                    Call_Cell[i].color = '#D8E4BC'
+                    Put_Cell[i].color = '#D8E4BC'
+                    Volatility[i].color = '#D8E4BC'
+                    
+                else:
+                    #Makes colour of failed pricing red and returns "BAD STRIKE" to indicate they must change strike price
+                    Call_Cell[i].value = "BAD STRIKE"
+                    Put_Cell[i].value = "BAD STRIKE"
+                    Call_Cell[i].color = '#FFC7CE'
+                    Put_Cell[i].color = '#FFC7CE'
+                    Volatility[i].value = "BAD STRIKE"
+                    Volatility[i].color = '#FFC7CE'
+                    
+            else:
+                #If no exact maturity date is available, uses interpolator to estimate implied volatility using two closest maturity dates
+                Vol = abs(Interpolator1(Stock_Name[i].value, End_Date[i].value, Strike[i].value))
+                
+                if Vol == False:
+                    Call_Cell[i].value = "FILL INFO"
+                    Put_Cell[i].value = "FILL INFO"
+                    Call_Cell[i].color = '#FFC7CE'
+                    Put_Cell[i].color = '#FFC7CE'
+                    Volatility[i].value = "FILL INFO"
+                    Volatility[i].color = '#FFC7CE'
+                else:
+                    #Create stock using info in specific column & print prices in Cell and Put cells & print volatility in Volatility cell
+                    Stock = BSC(Spot[i].value, Strike[i].value, Risk_Free_Rate[i].value, Time_To_Mat[i].value, Dividend[i].value, Vol)
+                    Call_Cell[i].value = Stock.Call_Price()
+                    Put_Cell[i].value = Stock.Put_Price()
+                    Volatility[i].value = Vol
+                    
+                    #Make colour of sucessfull pricing green
+                    Call_Cell[i].color = '#D8E4BC'
+                    Put_Cell[i].color = '#D8E4BC'
+                    Volatility[i].color = '#D8E4BC'
+            
+            
+        #Check if all info cells are empty
+        elif Strike[i].value == None and Spot[i].value == None and Risk_Free_Rate[i].value == None and Time_To_Mat[i].value == None and Dividend[i].value == None and Stock_Name[i].value == None and  End_Date[i].value == None:
+            #If all info cells are empty call and put cells are reverted to normal and nothing happens
+            Call_Cell[i].color = '#FFFFFF'
+            Put_Cell[i].color = '#FFFFFF'
+            Volatility[i].color = '#FFFFFF'
+        
+        else:
+            #Make failed pricing cell red
+            Call_Cell[i].value = "MISSING"
+            Put_Cell[i].value = "MISSING"
+            Call_Cell[i].color = '#FFC7CE'
+            Put_Cell[i].color = '#FFC7CE'
+            Volatility[i].value = "MISSING"
+            Volatility[i].color = '#FFC7CE'
+            
+            #Set color of missing info red
+            if Strike[i].value == None:
+                Strike[i].color = '#FFC7CE'
+            if Spot[i].value == None:
+                Spot[i].color = '#FFC7CE'
+            if Risk_Free_Rate[i].value == None:
+                Risk_Free_Rate[i].color = '#FFC7CE'
+            if Time_To_Mat[i].value == None:
+                Time_To_Mat[i].color = '#FFC7CE'
+            if Stock_Name[i].value == None:
+                Stock_Name[i].color = '#FFC7CE'
+            if End_Date[i].value == None:
+                End_Date[i].color = '#FFC7CE'
+            if Dividend[i].value == None:
+                Dividend[i].color = '#FFC7CE'
+
+
+
+if __name__ == "__main__":
+    xw.Book("BSC_Auto3.xlsm").set_mock_caller()
+    main()
