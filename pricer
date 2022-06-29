@@ -91,20 +91,26 @@ def Interpolator1(Stock_Name, End_Date, Strike):
     return Vol
 
 
+#General Interpolator that uses linear interpolation. Inputs are a dictionary with pairs of (Days Until Maturity & Rate) and Days Until Maturity
 def Interpolator(Days_With_Rates, Days_Until_Mat):
     
+    #Checks to see if Days Until Maturity matches with any exisiting Rates in dictionary
     for i in Days_With_Rates.keys():
         if i == Days_Until_Mat:
             Rate = Days_With_Rates[i]
             return Rate
+
+    #Create dictionary with (Differences between Days until Maturities & Days until Maturities) to find the closest date above and below
     differences = {}
     for i in Days_With_Rates.keys():
         differences[i-Days_Until_Mat] = i
         
+    #Checks to see if desired Days_Until_Mat is within accepted days, and if not the largest/smallest date is used
     if Days_Until_Mat>max(Days_With_Rates.keys()):
         Rate = Days_With_Rates[max(Days_With_Rates.keys())]
     elif Days_Until_Mat<min(Days_With_Rates.keys()):
         Rate = Days_With_Rates[min(Days_With_Rates.keys())]
+    #Finds the largest negative difference and smallest posititve difference and interpolate using those two Days and their corresponding rates
     else:
         L_Date = differences[max([n for n in differences.keys() if n<0])]
         H_Date = differences[min([n for n in differences.keys() if n>0])]
