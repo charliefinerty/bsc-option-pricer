@@ -91,6 +91,30 @@ def Interpolator1(Stock_Name, End_Date, Strike):
     return Vol
 
 
+def Interpolator(Days_With_Rates, Days_Until_Mat):
+    
+    for i in Days_With_Rates.keys():
+        if i == Days_Until_Mat:
+            Rate = Days_With_Rates[i]
+            return Rate
+    differences = {}
+    for i in Days_With_Rates.keys():
+        differences[i-Days_Until_Mat] = i
+        
+    if Days_Until_Mat>max(Days_With_Rates.keys()):
+        Rate = Days_With_Rates[max(Days_With_Rates.keys())]
+    elif Days_Until_Mat<min(Days_With_Rates.keys()):
+        Rate = Days_With_Rates[min(Days_With_Rates.keys())]
+    else:
+        L_Date = differences[max([n for n in differences.keys() if n<0])]
+        H_Date = differences[min([n for n in differences.keys() if n>0])]
+        L_Rate = Days_With_Rates[L_Date]
+        H_Rate = Days_With_Rates[H_Date]
+        print(L_Date,L_Rate,H_Date,H_Rate)
+        Rate = L_Rate + (Days_Until_Mat - L_Date) * ((H_Rate - L_Rate)/(H_Date - L_Date))
+        
+    return Rate
+
 
 #Update Spot values to most recent values
 def Update_Spot():
